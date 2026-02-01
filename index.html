@@ -1,6 +1,9 @@
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#6c63ff">
+
 <meta charset="UTF-8">
 <title>Controle de Transporte</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -325,3 +328,8 @@ renderizar();
 
 </body>
 </html>
+<script>
+if ("serviceWorker" in navigator) {
+  navigator.serviceWorker.register("sw.js");
+}
+</script>
