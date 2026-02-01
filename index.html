@@ -1,0 +1,327 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<title>Controle de Transporte</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+<style>
+:root {
+  --bg:#f4f6fb; --card:#fff; --text:#222; --primary:#6c63ff; --border:#ddd;
+}
+body.dark {
+  --bg:#121212; --card:#1e1e1e; --text:#f1f1f1; --primary:#8b9cff; --border:#333;
+}
+
+body {
+  margin:0; padding:20px;
+  font-family: system-ui, sans-serif;
+  background:var(--bg); color:var(--text);
+}
+
+.app {
+  max-width:900px; margin:auto;
+  background:var(--card);
+  padding:25px;
+  border-radius:22px;
+  box-shadow:0 20px 40px rgba(0,0,0,.15);
+}
+
+.top {
+  display:flex; justify-content:space-between; align-items:center;
+}
+
+button, input, select {
+  padding:12px;
+  border-radius:14px;
+  border:1px solid var(--border);
+  font-size:15px;
+}
+
+button { cursor:pointer; background:var(--primary); color:white; border:none; }
+
+.plataformas {
+  display:flex; gap:12px; margin:20px 0;
+}
+
+.plataformas button {
+  flex:1;
+  background:transparent;
+  border:2px solid var(--border);
+  font-weight:bold;
+  color:var(--text);
+}
+
+.plataformas button.ativa {
+  background:var(--primary);
+  color:white;
+  border-color:var(--primary);
+}
+
+.form {
+  display:flex;
+  flex-direction:column;
+  gap:12px;
+}
+
+.autocomplete {
+  position:relative;
+}
+
+.sugestoes {
+  position:absolute;
+  top:100%;
+  left:0;
+  right:0;
+  background:var(--card);
+  border:1px solid var(--border);
+  border-radius:12px;
+  max-height:180px;
+  overflow:auto;
+  z-index:10;
+}
+
+.sugestoes div {
+  padding:10px;
+  cursor:pointer;
+}
+
+.sugestoes div:hover {
+  background:rgba(0,0,0,.05);
+}
+
+.dashboard {
+  display:grid;
+  grid-template-columns:repeat(auto-fit,minmax(200px,1fr));
+  gap:12px; margin-top:25px;
+}
+
+.card {
+  padding:18px;
+  border-radius:16px;
+  box-shadow:0 8px 20px rgba(0,0,0,.08);
+  text-align:center;
+}
+
+.card span {
+  display:block; font-size:22px; font-weight:bold;
+}
+
+.viagem {
+  margin-top:12px;
+  padding:15px;
+  border-radius:16px;
+  box-shadow:0 6px 15px rgba(0,0,0,.08);
+  position:relative;
+}
+
+.viagem button {
+  position:absolute;
+  top:10px;
+  right:10px;
+  background:#ff5c5c;
+  padding:6px 10px;
+}
+
+a.maps {
+  display:inline-block;
+  margin-top:6px;
+  font-size:14px;
+  color:var(--primary);
+  text-decoration:none;
+}
+
+canvas { margin-top:20px; }
+</style>
+</head>
+
+<body>
+
+<div class="app">
+  <div class="top">
+    <h1>🚕 Transporte</h1>
+    <button onclick="toggleTema()">🌙</button>
+  </div>
+
+  <div class="plataformas">
+    <button id="btnUber" onclick="plataforma('Uber')">Uber</button>
+    <button id="btn99" onclick="plataforma('99')">99</button>
+  </div>
+
+  <div class="form">
+    <input type="number" id="valor" placeholder="Valor (R$)" step="0.01">
+
+    <div class="autocomplete">
+      <input type="text" id="origem" placeholder="Origem">
+      <div id="sugestoesOrigem" class="sugestoes"></div>
+    </div>
+
+    <div class="autocomplete">
+      <input type="text" id="destino" placeholder="Destino">
+      <div id="sugestoesDestino" class="sugestoes"></div>
+    </div>
+
+    <input type="date" id="data">
+    <button onclick="adicionar()">➕ Adicionar</button>
+  </div>
+
+  <select id="filtroMes" onchange="renderizar()" style="margin-top:15px">
+    <option value="">📆 Todos os meses</option>
+  </select>
+
+  <div class="dashboard">
+    <div class="card">Total<span id="totalGeral">R$ 0,00</span></div>
+    <div class="card">Uber<span id="totalUber">R$ 0,00</span></div>
+    <div class="card">99<span id="total99">R$ 0,00</span></div>
+  </div>
+
+  <canvas id="grafico"></canvas>
+
+  <h2>📋 Histórico</h2>
+  <div id="lista"></div>
+</div>
+
+<script>
+let viagens = JSON.parse(localStorage.getItem("viagens")) || [];
+let enderecos = JSON.parse(localStorage.getItem("enderecos")) || [];
+let plat = null;
+let graficoChart;
+const ctx = document.getElementById("grafico");
+
+const brl = v => v.toLocaleString("pt-BR", {
+  style: "currency",
+  currency: "BRL"
+});
+
+data.value = new Date().toISOString().split("T")[0];
+document.body.className = localStorage.getItem("tema") || "";
+
+function toggleTema(){
+  document.body.classList.toggle("dark");
+  localStorage.setItem("tema", document.body.className);
+}
+
+function plataforma(p){
+  plat = p;
+  btnUber.classList.remove("ativa");
+  btn99.classList.remove("ativa");
+  (p === "Uber" ? btnUber : btn99).classList.add("ativa");
+}
+
+/* AUTOCOMPLETE LOCAL (ENDEREÇOS JÁ DIGITADOS) */
+function mostrarSugestoes(input, container){
+  const termo = input.value.toLowerCase();
+  container.innerHTML = "";
+
+  if(termo.length < 1) return;
+
+  enderecos
+    .filter(e => e.toLowerCase().includes(termo))
+    .slice(0,5)
+    .forEach(end => {
+      const div = document.createElement("div");
+      div.textContent = end;
+      div.onclick = () => {
+        input.value = end;
+        container.innerHTML = "";
+      };
+      container.appendChild(div);
+    });
+}
+
+origem.oninput = () => mostrarSugestoes(origem, sugestoesOrigem);
+destino.oninput = () => mostrarSugestoes(destino, sugestoesDestino);
+
+/* APP */
+function adicionar(){
+  if(!plat || !valor.value || !origem.value || !destino.value){
+    alert("Preencha tudo");
+    return;
+  }
+
+  viagens.push({
+    id: Date.now(),
+    plataforma: plat,
+    valor: +valor.value,
+    origem: origem.value,
+    destino: destino.value,
+    data: data.value
+  });
+
+  [origem.value, destino.value].forEach(e => {
+    if(!enderecos.includes(e)) enderecos.push(e);
+  });
+
+  localStorage.setItem("viagens", JSON.stringify(viagens));
+  localStorage.setItem("enderecos", JSON.stringify(enderecos));
+
+  valor.value = origem.value = destino.value = "";
+  data.value = new Date().toISOString().split("T")[0];
+
+  carregarMeses();
+  renderizar();
+}
+
+function excluir(id){
+  viagens = viagens.filter(v => v.id !== id);
+  localStorage.setItem("viagens", JSON.stringify(viagens));
+  carregarMeses();
+  renderizar();
+}
+
+function carregarMeses(){
+  filtroMes.innerHTML = '<option value="">📆 Todos os meses</option>';
+  [...new Set(viagens.map(v => v.data.slice(0,7)))]
+    .sort()
+    .forEach(m => {
+      filtroMes.innerHTML += `<option value="${m}">${m}</option>`;
+    });
+}
+
+function renderizar(){
+  lista.innerHTML = "";
+  let u = 0, n = 0;
+
+  viagens.forEach(v => {
+    if(filtroMes.value && !v.data.startsWith(filtroMes.value)) return;
+
+    v.plataforma === "Uber" ? u += v.valor : n += v.valor;
+
+    lista.innerHTML += `
+      <div class="viagem">
+        <strong>${v.plataforma}</strong> - ${brl(v.valor)}<br>
+        ${v.origem} → ${v.destino}<br>
+        📅 ${v.data}<br>
+        <a class="maps" target="_blank"
+          href="https://www.google.com/maps/dir/${encodeURIComponent(v.origem)}/${encodeURIComponent(v.destino)}">
+          🗺️ Abrir no Maps
+        </a>
+        <button onclick="excluir(${v.id})">X</button>
+      </div>`;
+  });
+
+  totalGeral.innerText = brl(u + n);
+  totalUber.innerText = brl(u);
+  total99.innerText = brl(n);
+
+  graficoChart?.destroy();
+  graficoChart = new Chart(ctx, {
+    type: "pie",
+    data: {
+      labels: ["Uber", "99"],
+      datasets: [{
+        data: [u, n],
+        backgroundColor: ["#6c63ff", "#ff9800"]
+      }]
+    }
+  });
+}
+
+carregarMeses();
+renderizar();
+</script>
+
+</body>
+</html>
